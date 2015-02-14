@@ -9,13 +9,17 @@ from errors import FileReadError
 class RestaurantRecommender(object):
     def __init__(self, restaurant_file):
         self.restaurant_file = restaurant_file
+        self._check_file_validity()
         self.restaurant_items = self._prepare_restaurant_menu()
 
     def _check_file_validity(self):
+        '''
+        Check th validity of a csv file feeded as an input.
+        '''
         file_validity = (
             os.path.exists(self.restaurant_file) and 
             os.path.getsize(self.restaurant_file) > 0 and 
-            os.path.splitext()[1] == ".csv")
+            os.path.splitext(self.restaurant_file)[1] == ".csv")
         if not file_validity:
             raise FileReadError("Invalid input file.")
 
@@ -65,6 +69,7 @@ class RestaurantRecommender(object):
             # Split the meal and value_meal from all the items available in 
             # a restaurant.
             rest_price = 0.0
+            # Separate out the normal meal and value_meal.
             menu_items_status = {item: False for item in menu_items}
             meals = {item_info['item'][0]: item_info['price'] 
                      for item_info in items_info 
@@ -76,6 +81,8 @@ class RestaurantRecommender(object):
             selected_menu_items = {}
             select_val_meal_price = 0.0  
             min_price = 100000000000000000000.00
+            # Firstly calculate the minimum price between value_meal and 
+            # the available menu in normal meal.
             for val_meal_items, val_meal_price in value_meals.items():
                 possible_select_items = menu_items.intersection(val_meal_items)
                 if len(possible_select_items) >= len(selected_menu_items):

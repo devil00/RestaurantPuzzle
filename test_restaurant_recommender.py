@@ -1,5 +1,6 @@
 import unittest
 from restaurant_recommender import RestaurantRecommender
+from errors import FileReadError
 
 # This module contains the test cases for module restaurant_recommender.
 
@@ -35,6 +36,10 @@ class TestRestaurantRecommender(unittest.TestCase):
         self.assertEqual('1', result[0])
         self.assertEqual('5.0', result[1])
 
+    def test_restaurant_file_validity(self):
+        with self.assertRaises(FileReadError):
+            RestaurantRecommender("sample.csv")
+            RestaurantRecommender("sample.txt")
         
      
 if __name__ == "__main__":
