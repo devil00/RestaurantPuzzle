@@ -6,6 +6,9 @@ from collections import defaultdict
 from errors import FileReadError
 
 
+PRICE_MAX_CONST = 1000000000.00
+
+
 class RestaurantRecommender(object):
     def __init__(self, restaurant_file):
         self.restaurant_file = restaurant_file
@@ -62,7 +65,39 @@ class RestaurantRecommender(object):
     def validate(self, rid, price, item_list):
         return (rid > 0 and price > 0.0 and item_list is not None)
 
+    def _calculate_min_price_separately_for_items(self, item_list,
+                                                  restaurant_items):
+        '''
+        This is a helper function to pick single item at a time and 
+        calculate the minimum price for that item from all the available 
+        restaurant items (both value_meal and meal) 
+        if any one of them is not present then it will return None which means 
+        minimum price for these items can't be calculated.
+        :param item_list: List of individual items.
+        type item_list: list
+        :param restaurant_items: list of item info available in a restaurant,
+                       e.g., [{'item': ('A', 'B'), 'price': 4.5},
+                       {'item': 'F'}, 'price': 1.0}, ..]
+        :type restaurant_items: list
+        '''
+        price = 0.0
+        for item in item_list:
+            try:
+              price += min(
+                  [rest_item['price'] for rest_item in restaurant_items 
+                   if item in rest_item['item']])
+            except ValueError:
+                price = None
+                break
+        return price
+
     def recommend(self, menu_items):
+        '''
+        It will select all the restaurant where menu is available and
+        return the one with the minimum price for this menu.
+        :param menu_items: Menu provided by user.
+        :type menu_items: list
+        '''
         menu_items = [mi.lower().strip() for mi in menu_items]
         selected_restaurants = {}
         for restaurant_id, items_info in self.restaurant_items.items():
@@ -71,46 +106,55 @@ class RestaurantRecommender(object):
             rest_price = 0.0
             # Separate out the normal meal and value_meal.
             menu_items_status = {item: False for item in menu_items}
-            meals = {item_info['item'][0]: item_info['price'] 
-                     for item_info in items_info 
-                     if len(item_info['item']) == 1}
             value_meals = {item_info['item']: item_info['price'] 
                            for item_info in items_info 
                            if len(item_info['item']) > 1}
             menu_items = set(menu_items)
             selected_menu_items = {}
-            select_val_meal_price = 0.0  
-            min_price = 100000000000000000000.00
-            # Firstly calculate the minimum price between value_meal and 
+            select_val_meal_price = PRICE_MAX_CONST
+            # Firstly, calculate the minimum price between value_meal and 
             # the available menu in normal meal.
             for val_meal_items, val_meal_price in value_meals.items():
                 possible_select_items = menu_items.intersection(val_meal_items)
-                if len(possible_select_items) >= len(selected_menu_items):
-                    if float(val_meal_price) < min_price:
+                if len(possible_select_items) == len(selected_menu_items):
+                      if val_meal_price < select_val_meal_price:
                         selected_menu_items = possible_select_items
                         select_val_meal_price = val_meal_price
-
-            try:
-                select_val_meal_price_separate = sum(
-                    [meals[item] for item in selected_menu_items])
-                if select_val_meal_price_separate < select_val_meal_price:
-                    select_val_meal_price = select_val_meal_price_separate
-            except KeyError:
-                pass
-
+                elif len(possible_select_items) > len(selected_menu_items):
+                        selected_menu_items = possible_select_items
+                        select_val_meal_price = val_meal_price
+                else:
+                    pass
+            select_val_meal_price_separate = \
+                    self._calculate_min_price_separately_for_items(
+                        selected_menu_items, items_info)
+            if (select_val_meal_price_separate is not None and
+                select_val_meal_price_separate < select_val_meal_price):
+                select_val_meal_price = select_val_meal_price_separate
             menu_items_status.update(
                 {item: True for item in selected_menu_items}
             )
+
+            # After calculating minimum price from value_meal,
+            # it's time to compute the remianing items price.
             remaining_menu_items = menu_items.difference(selected_menu_items)
 
-            rest_price += select_val_meal_price
-            for rem_item in remaining_menu_items:
-                if rem_item in meals:
-                    rest_price += meals[rem_item]
-                    menu_items_status[rem_item] = True
+            if select_val_meal_price != PRICE_MAX_CONST:
+                rest_price += select_val_meal_price
+            possible_rest_price =\
+                    self._calculate_min_price_separately_for_items(
+                        remaining_menu_items, items_info)
+            if possible_rest_price is not None:
+                menu_items_status.update(
+                    {
+                        item: True for item in remaining_menu_items
+                    }
+                )
+                rest_price += possible_rest_price
+            # Make sure all the menu items are available in a 
+            # restaurant before selecting it.
             if all(menu_items_status.values()):
                 selected_restaurants[restaurant_id] = rest_price
-
         if not selected_restaurants:
             return "Nil"
         else:
