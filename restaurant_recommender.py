@@ -139,7 +139,6 @@ def main():
     menu_items = sys.argv[2:]
     rr = RestaurantRecommender(restaurant_items_file)
     print rr.recommend(menu_items)
-    print "Total time : {}".format(end - start)
 
 
 if __name__ == "__main__":
