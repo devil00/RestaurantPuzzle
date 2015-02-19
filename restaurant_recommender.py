@@ -87,12 +87,13 @@ class RestaurantRecommender(object):
     def _compute_minimum_price_for_order(self, menu_order_hash, order_items):
         if len(order_items) == 0 or not order_items:
             return 0.0
-        item_to_satisfy = order_items.pop()
+        item_to_satisfy = order_items[0]
         menus = menu_order_hash[item_to_satisfy]
         current_min_price = PRICE_MAX_CONST
         for menu_item in menus:
             mprice = self._compute_minimum_price_for_order(
-                menu_order_hash, order_items)
+                menu_order_hash, [item for item in order_items \
+                                  if item not in menu_item['item']])
             possible_min_price = menu_item['price'] + mprice
             if possible_min_price < current_min_price:
                 current_min_price = possible_min_price
@@ -116,11 +117,12 @@ class RestaurantRecommender(object):
                         order_items, items_info)
             if not menu_order_hash:
                 continue
-            min_price = self._compute_minimum_price_for_order(
-                menu_order_hash, order_items)
+            if len(set(menu_order_hash.keys()).intersection(
+                order_items)) == len(order_items):
+                min_price = self._compute_minimum_price_for_order(
+                    menu_order_hash, order_items)
 
-            selected_restaurants[restaurant_id] = min_price
-        print selected_restaurants
+                selected_restaurants[restaurant_id] = min_price
         if not selected_restaurants:
             return "Nil"
         else:
@@ -132,14 +134,11 @@ def main():
     if len(sys.argv) < 3:
         print 'Nil'
         return
-    import time
 
     restaurant_items_file = sys.argv[1]
     menu_items = sys.argv[2:]
-    start = time.time()    
     rr = RestaurantRecommender(restaurant_items_file)
     print rr.recommend(menu_items)
-    end = time.time()
     print "Total time : {}".format(end - start)
 
 
