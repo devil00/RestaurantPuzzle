@@ -136,7 +136,7 @@ def main():
         return
 
     restaurant_items_file = sys.argv[1]
-    menu_items = sys.argv[2:]
+    menu_items = list(set(sys.argv[2:]))
     rr = RestaurantRecommender(restaurant_items_file)
     print rr.recommend(menu_items)
 
