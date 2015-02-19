@@ -1,12 +1,18 @@
+'''
+This module is the solution of Jurgensville Restaurant puzzle.
+@author: Mayur Swami
+@Date: 19-Feb-2015
+'''
 import os
 import csv
 import sys
 from collections import defaultdict
+from itertools import combinations
 
 from errors import FileReadError
 
 
-PRICE_MAX_CONST = 1000000000.00
+PRICE_MAX_CONST = 1000000000000.00
 
 
 class RestaurantRecommender(object):
@@ -65,31 +71,33 @@ class RestaurantRecommender(object):
     def validate(self, rid, price, item_list):
         return (rid > 0 and price > 0.0 and item_list is not None)
 
-    def _calculate_min_price_separately_for_items(self, item_list,
-                                                  restaurant_items):
-        '''
-        This is a helper function to pick single item at a time and 
-        calculate the minimum price for that item from all the available 
-        restaurant items (both value_meal and meal) 
-        if any one of them is not present then it will return None which means 
-        minimum price for these items can't be calculated.
-        :param item_list: List of individual items.
-        type item_list: list
-        :param restaurant_items: list of item info available in a restaurant,
-                       e.g., [{'item': ('A', 'B'), 'price': 4.5},
-                       {'item': 'F'}, 'price': 1.0}, ..]
-        :type restaurant_items: list
-        '''
-        price = 0.0
-        for item in item_list:
-            try:
-              price += min(
-                  [rest_item['price'] for rest_item in restaurant_items 
-                   if item in rest_item['item']])
-            except ValueError:
-                price = None
+    def _prepare_order_item_hash_from_restaurant_menu(self, order_items,
+                                                      restaurant_items):
+        order_hash = defaultdict(list)
+        for item in order_items:
+            for rest_item in restaurant_items:
+                if item in rest_item['item']:
+                    order_hash[item].append(rest_item)
+            # If any of the order_item is not available in a resturant menu,
+            # then immediately get out of the iteration.
+            if not order_hash:
                 break
-        return price
+        return order_hash
+
+    def _compute_minimum_price_for_order(self, menu_order_hash, order_items):
+        if len(order_items) == 0 or not order_items:
+            return 0.0
+        item_to_satisfy = order_items.pop()
+        menus = menu_order_hash[item_to_satisfy]
+        current_min_price = PRICE_MAX_CONST
+        for menu_item in menus:
+            mprice = self._compute_minimum_price_for_order(
+                menu_order_hash, order_items)
+            possible_min_price = menu_item['price'] + mprice
+            if possible_min_price < current_min_price:
+                current_min_price = possible_min_price
+        return current_min_price
+
 
     def recommend(self, menu_items):
         '''
@@ -98,63 +106,21 @@ class RestaurantRecommender(object):
         :param menu_items: Menu provided by user.
         :type menu_items: list
         '''
-        menu_items = [mi.lower().strip() for mi in menu_items]
+ 
         selected_restaurants = {}
+        menu_items = [item.strip().lower() for item in menu_items]
         for restaurant_id, items_info in self.restaurant_items.items():
-            # Split the meal and value_meal from all the items available in 
-            # a restaurant.
-            rest_price = 0.0
-            # Separate out the normal meal and value_meal.
-            menu_items_status = {item: False for item in menu_items}
-            value_meals = {item_info['item']: item_info['price'] 
-                           for item_info in items_info 
-                           if len(item_info['item']) > 1}
-            menu_items = set(menu_items)
-            selected_menu_items = {}
-            select_val_meal_price = PRICE_MAX_CONST
-            # Firstly, calculate the minimum price between value_meal and 
-            # the available menu in normal meal.
-            for val_meal_items, val_meal_price in value_meals.items():
-                possible_select_items = menu_items.intersection(val_meal_items)
-                if len(possible_select_items) == len(selected_menu_items):
-                      if val_meal_price < select_val_meal_price:
-                        selected_menu_items = possible_select_items
-                        select_val_meal_price = val_meal_price
-                elif len(possible_select_items) > len(selected_menu_items):
-                        selected_menu_items = possible_select_items
-                        select_val_meal_price = val_meal_price
-                else:
-                    pass
-            select_val_meal_price_separate = \
-                    self._calculate_min_price_separately_for_items(
-                        selected_menu_items, items_info)
-            if (select_val_meal_price_separate is not None and
-                select_val_meal_price_separate < select_val_meal_price):
-                select_val_meal_price = select_val_meal_price_separate
-            menu_items_status.update(
-                {item: True for item in selected_menu_items}
-            )
+            order_items = menu_items[:]
+            menu_order_hash = \
+                    self._prepare_order_item_hash_from_restaurant_menu(
+                        order_items, items_info)
+            if not menu_order_hash:
+                continue
+            min_price = self._compute_minimum_price_for_order(
+                menu_order_hash, order_items)
 
-            # After calculating minimum price from value_meal,
-            # it's time to compute the remianing items price.
-            remaining_menu_items = menu_items.difference(selected_menu_items)
-
-            if select_val_meal_price != PRICE_MAX_CONST:
-                rest_price += select_val_meal_price
-            possible_rest_price =\
-                    self._calculate_min_price_separately_for_items(
-                        remaining_menu_items, items_info)
-            if possible_rest_price is not None:
-                menu_items_status.update(
-                    {
-                        item: True for item in remaining_menu_items
-                    }
-                )
-                rest_price += possible_rest_price
-            # Make sure all the menu items are available in a 
-            # restaurant before selecting it.
-            if all(menu_items_status.values()):
-                selected_restaurants[restaurant_id] = rest_price
+            selected_restaurants[restaurant_id] = min_price
+        print selected_restaurants
         if not selected_restaurants:
             return "Nil"
         else:
@@ -166,12 +132,15 @@ def main():
     if len(sys.argv) < 3:
         print 'Nil'
         return
+    import time
 
     restaurant_items_file = sys.argv[1]
     menu_items = sys.argv[2:]
-
+    start = time.time()    
     rr = RestaurantRecommender(restaurant_items_file)
     print rr.recommend(menu_items)
+    end = time.time()
+    print "Total time : {}".format(end - start)
 
 
 if __name__ == "__main__":
